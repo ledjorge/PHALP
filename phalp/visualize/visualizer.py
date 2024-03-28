@@ -27,7 +27,7 @@ class Visualizer(nn.Module):
         
         self.cfg = cfg
         self.hmar = hmar
-        self.device = 'cuda'
+        self.device = 'mps'
         if(not(self.cfg.render.head_mask)):
             texture_file = np.load(self.cfg.SMPL.TEXTURE)
             self.faces_cpu = texture_file['smpl_faces'].astype('uint32')
@@ -47,7 +47,7 @@ class Visualizer(nn.Module):
                 raise ValueError('''
                 Please install facenet_pytorch to use blur_faces option. 
                 `pip install facenet_pytorch` or `pip install -e . [blur]`''')
-            self.face_detector = MTCNN(keep_all=True, device="cuda")
+            self.face_detector = MTCNN(keep_all=True, device='mps')
 
     def reset_render(self, image_size):
         del self.render
@@ -236,8 +236,8 @@ class Visualizer(nn.Module):
                 uv_y0 = (img_width//4)*(i_%4) + left
                 uv_y1 = (img_width//4)*(i_%4) + (img_width//4) + left
                 uvmap_x = uv_maps[i_].unsqueeze(0)*5.0  
-                uvmap_x = uvmap_x * torch.tensor([0.229, 0.224, 0.225], device="cuda").reshape(1,3,1,1) 
-                uvmap_x = uvmap_x + torch.tensor([0.485, 0.456, 0.406], device="cuda").reshape(1,3,1,1)
+                uvmap_x = uvmap_x * torch.tensor([0.229, 0.224, 0.225], device='mps').reshape(1,3,1,1) 
+                uvmap_x = uvmap_x + torch.tensor([0.485, 0.456, 0.406], device='mps').reshape(1,3,1,1)
                 uvmap_x[:, :, mask_valid_] = 1
                 uvmap_x_ = F.interpolate(uvmap_x, size=(img_height//2, img_width//4))
                 rendered_image_tex[0, :, uv_x0:uv_x1, uv_y0:uv_y1] = uvmap_x_[0]
