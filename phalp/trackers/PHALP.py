@@ -42,6 +42,7 @@ class PHALP(nn.Module):
     def __init__(self, cfg):
         log.info('class PHALP __init__(self, cfg): super(PHALP, self).__init__()')
         super(PHALP, self).__init__()
+        log.info('class PHALP __init__(self, cfg): super(PHALP, self).__init__() done')
 
         self.cfg = cfg
         self.device = torch.device(self.cfg.device)
@@ -70,6 +71,7 @@ class PHALP(nn.Module):
         
         # create nessary directories
         self.default_setup()
+        log.info('class PHALP __init__(self, cfg) done')
         
     def setup_hmr(self):
         log.info("Loading HMAR model...")
@@ -138,7 +140,8 @@ class PHALP(nn.Module):
             pass
         
     def track(self):
-        
+        log.info('PHALP.track()')
+
         eval_keys       = ['tracked_ids', 'tracked_bbox', 'tid', 'bbox', 'tracked_time']
         history_keys    = ['appe', 'loca', 'pose', 'uv'] if self.cfg.render.enable else []
         prediction_keys = ['prediction_uv', 'prediction_pose', 'prediction_loca'] if self.cfg.render.enable else []
