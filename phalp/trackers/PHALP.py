@@ -41,6 +41,7 @@ class PHALP(nn.Module):
 
     def __init__(self, cfg):
         log.info('class PHALP __init__(self, cfg): super(PHALP, self).__init__()')
+        log.info(cfg)
         super(PHALP, self).__init__()
         log.info('class PHALP __init__(self, cfg): super(PHALP, self).__init__() done')
 
