@@ -40,7 +40,7 @@ log = get_pylogger(__name__)
 class PHALP(nn.Module):
 
     def __init__(self, cfg):
-        print('class PHALP __init__(self, cfg): super(PHALP, self).__init__()')
+        log.info('class PHALP __init__(self, cfg): super(PHALP, self).__init__()')
         super(PHALP, self).__init__()
 
         self.cfg = cfg
@@ -158,13 +158,13 @@ class PHALP(nn.Module):
         
         # check if the video is already processed                                  
         if(not(self.cfg.overwrite) and os.path.isfile(pkl_path)):
-            print('PHALP.track(): video is already processed')
+            log.info('PHALP.track(): video is already processed')
             return 0
         
         # eval mode
-        print('PHALP.track(): going to eval()')
+        log.info('PHALP.track(): going to eval()')
         self.eval()
-        print('PHALP.track(): eval() done')
+        log.info('PHALP.track(): eval() done')
         
         # setup rendering, deep sort and directory structure
         self.setup_deepsort()
