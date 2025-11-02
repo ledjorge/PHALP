@@ -85,7 +85,10 @@ class IO_Manager():
         # read from image folder
         elif(os.path.isdir(source_path)):
             video_name = source_path.split('/')[-1]
-            list_of_frames = sorted(glob.glob(source_path + "/*.jpg"))
+            # Try png first, then jpg
+            list_of_frames = sorted(glob.glob(source_path + "/*.png"))
+            if not list_of_frames:
+                list_of_frames = sorted(glob.glob(source_path + "/*.jpg"))
 
         # pkl files are used to track ground truth videos with given bounding box
         # these gt_id, gt_bbox will be stored in additional_data, ground truth bbox should be in the format of [x1, y1, w, h]

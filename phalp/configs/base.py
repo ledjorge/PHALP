@@ -84,7 +84,7 @@ class PostProcessConfig:
 
 @dataclass
 class SMPLConfig:
-    MODEL_PATH: str = f"{CACHE_DIR}/phalp/3D/models/smpl/"
+    MODEL_PATH: str = f"{CACHE_DIR}/4DHumans/data/smpl/"
     GENDER: str = 'neutral'
     MODEL_TYPE: str = 'smpl'
     NUM_BODY_JOINTS: int = 23
