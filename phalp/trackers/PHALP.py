@@ -648,7 +648,8 @@ class PHALP(nn.Module):
         os.makedirs(os.path.join(CACHE_DIR, "phalp/weights"), exist_ok=True)
         os.makedirs(os.path.join(CACHE_DIR, "phalp/ava"), exist_ok=True)
 
-        smpl_path = os.path.join(CACHE_DIR, "phalp/3D/models/smpl/SMPL_NEUTRAL.pkl")
+        # Use same SMPL location as 4DHumans/HMR2
+        smpl_path = os.path.join(CACHE_DIR, "4DHumans/data/smpl/SMPL_NEUTRAL.pkl")
 
         if not os.path.exists(smpl_path):
             # We are downloading the SMPL model here for convenience. Please accept the license

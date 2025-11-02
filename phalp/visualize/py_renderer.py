@@ -1,6 +1,15 @@
 import os
+import sys
+# Only force EGL on Linux; let other platforms keep their default backend.
+if 'PYOPENGL_PLATFORM' not in os.environ and sys.platform.startswith('linux'):
+    os.environ['PYOPENGL_PLATFORM'] = 'egl'
+try:
+    import pyglet  # type: ignore
+    if sys.platform.startswith('linux') and not os.environ.get('DISPLAY'):
+        pyglet.options["headless"] = True
+except Exception:
+    pyglet = None
 import torch
-os.environ['PYOPENGL_PLATFORM'] = 'egl'
 import numpy as np
 import pyrender
 import trimesh

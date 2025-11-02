@@ -428,7 +428,7 @@ class Pose_transformer_v2(nn.Module):
         from slowfast.visualization.predictor import ActionPredictor, Predictor
         from phalp.models.predictor.wrapper_pyslowfast import SlowFastWrapper
 
-        device = 'cuda'
+        device = 'mps'
         path_to_config = "/private/home/jathushan/3D/slowfast/configs/AVA/MViT-L-312_masked.yaml"
         center_crop = False
         if("MViT" in path_to_config): 

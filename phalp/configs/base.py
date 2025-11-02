@@ -84,7 +84,7 @@ class PostProcessConfig:
 
 @dataclass
 class SMPLConfig:
-    MODEL_PATH: str = f"{CACHE_DIR}/phalp/3D/models/smpl/"
+    MODEL_PATH: str = f"{CACHE_DIR}/4DHumans/data/smpl/"
     GENDER: str = 'neutral'
     MODEL_TYPE: str = 'smpl'
     NUM_BODY_JOINTS: int = 23
@@ -127,7 +127,7 @@ class ExtraConfig:
 class FullConfig:
     seed: int = 42
     track_dataset: str = "demo"
-    device: str = "cuda"
+    device: str = 'mps'
     base_tracker: str = "PHALP"
     train: bool = False
     debug: bool = False

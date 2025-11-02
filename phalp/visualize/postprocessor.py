@@ -20,7 +20,7 @@ class Postprocessor(nn.Module):
         super(Postprocessor, self).__init__()
         
         self.cfg = cfg
-        self.device = 'cuda'
+        self.device = 'mps'
         self.phalp_tracker = phalp_tracker
 
     def post_process(self, final_visuals_dic, save_fast_tracks=False, video_pkl_name=""):
