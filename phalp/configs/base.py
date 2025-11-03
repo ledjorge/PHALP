@@ -75,6 +75,12 @@ class RenderConfig:
     fps: int = 30
     blur_faces: bool = False
     show_keypoints: bool = False
+    output_video: bool = True
+    output_frames: bool = False
+    video_dir: str = ''
+    video_filename: str = ''
+    frames_dir: str = 'render_frames'
+    frame_extension: str = 'png'
 
 @dataclass
 class PostProcessConfig:

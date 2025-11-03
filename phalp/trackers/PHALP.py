@@ -153,7 +153,6 @@ class PHALP(nn.Module):
         list_of_frames, additional_data = io_data['list_of_frames'], io_data['additional_data']
         self.cfg.video_seq = io_data['video_name']
         pkl_path = self.cfg.video.output_dir + '/results/' + self.cfg.track_dataset + "_" + str(self.cfg.video_seq) + '.pkl'
-        video_path = self.cfg.video.output_dir + '/' + self.cfg.base_tracker + '_' + str(self.cfg.video_seq) + '.mp4'
         
         # check if the video is already processed                                  
         if(not(self.cfg.overwrite) and os.path.isfile(pkl_path)): 
@@ -167,6 +166,24 @@ class PHALP(nn.Module):
         self.default_setup()
         
         log.info("Saving tracks at : " + self.cfg.video.output_dir + '/results/' + str(self.cfg.video_seq))
+
+        render_cfg = self.cfg.render
+        video_root = Path(self.cfg.video.output_dir)
+        video_dir = video_root
+        if getattr(render_cfg, "video_dir", ""):
+            video_dir = video_root / render_cfg.video_dir
+
+        frames_dir = None
+        if getattr(render_cfg, "output_frames", False):
+            frames_subdir = render_cfg.frames_dir or "render_frames"
+            frames_dir = video_root / frames_subdir / str(self.cfg.video_seq)
+            frames_dir.mkdir(parents=True, exist_ok=True)
+
+        video_path = None
+        if getattr(render_cfg, "output_video", True):
+            video_dir.mkdir(parents=True, exist_ok=True)
+            video_filename = render_cfg.video_filename or f"{self.cfg.base_tracker}_{self.cfg.video_seq}.mp4"
+            video_path = str((video_dir / video_filename))
         
         try: 
             
@@ -252,7 +269,17 @@ class PHALP(nn.Module):
                         rendered_, f_size = self.visualizer.render_video(final_visuals_dic[frame_key])      
 
                         # save the rendered frame
-                        self.io_manager.save_video(video_path, rendered_, f_size, t=t__-self.cfg.phalp.n_init)
+                        if getattr(self.cfg.render, "output_video", True) and video_path is not None:
+                            self.io_manager.save_video(video_path, rendered_, f_size, t=t__-self.cfg.phalp.n_init)
+
+                        if frames_dir is not None:
+                            if isinstance(frame_key, tuple):
+                                frame_stem = f"{Path(frame_key[0]).stem}_{frame_key[1]}"
+                            else:
+                                frame_stem = Path(frame_key).stem
+                            frame_ext = getattr(self.cfg.render, "frame_extension", "png")
+                            frame_output_path = frames_dir / f"{frame_stem}.{frame_ext}"
+                            cv2.imwrite(str(frame_output_path), rendered_)
 
                         # delete the frame after rendering it
                         del final_visuals_dic[frame_key]['frame']

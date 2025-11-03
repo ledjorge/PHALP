@@ -148,6 +148,8 @@ class IO_Manager():
         self.video = None
 
     def save_video(self, video_path, rendered_, f_size, t=0):
+        if not getattr(self.cfg.render, "output_video", True):
+            return
         if(t==0):
             self.video = {
                 "video": cv2.VideoWriter(video_path, cv2.VideoWriter_fourcc(*'mp4v'), self.output_fps, frameSize=f_size),
@@ -158,6 +160,9 @@ class IO_Manager():
         self.video["video"].write(rendered_)
 
     def close_video(self):
+        if not getattr(self.cfg.render, "output_video", True):
+            self.video = None
+            return
         if(self.video is not None):
             self.video["video"].release()
             if(self.cfg.video.useffmpeg):
