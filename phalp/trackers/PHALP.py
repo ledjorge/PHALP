@@ -183,7 +183,7 @@ class PHALP(nn.Module):
             self.cfg.video_seq = chunk_seq
 
             pkl_path = f"{self.cfg.video.output_dir}/results/{self.cfg.track_dataset}_{chunk_seq}.pkl"
-            if using_chunks and getattr(self.cfg.video, "resume_chunks", True) and (not self.cfg.overwrite) and os.path.isfile(pkl_path):
+            if using_chunks and getattr(self.cfg.video, "resume_chunks", True) and os.path.isfile(pkl_path):
                 log.info("Skipping chunk %s (frames %d-%d); results already exist.", chunk_seq, start, end - 1)
                 continue
 
@@ -253,6 +253,7 @@ class PHALP(nn.Module):
 
             tracked_frames = []
             final_visuals_dic = {}
+            render_reset_done = False
 
             progress_desc = f"Tracking : {chunk_seq}"
             if chunk_total > 1:
@@ -268,11 +269,12 @@ class PHALP(nn.Module):
                 measurments             = [img_height, img_width, new_image_size, left, top]
                 self.cfg.phalp.shot     = 1 if rel_idx in list_of_shots else 0
 
-                if(self.cfg.render.enable and self.visualizer is not None):
+                if(self.cfg.render.enable and self.visualizer is not None and not render_reset_done):
                     # reset the renderer
                     self.cfg.render.up_scale = int(self.cfg.render.output_resolution / self.cfg.render.res)
                     try:
                         self.visualizer.reset_render(self.cfg.render.res*self.cfg.render.up_scale)
+                        render_reset_done = True
                     except Exception as exc:
                         log.warning("Renderer reset failed (%s). Disabling rendering and continuing.", exc)
                         self.cfg.render.enable = False
@@ -332,7 +334,11 @@ class PHALP(nn.Module):
                                 for pkey_ in prediction_keys: final_visuals_dic[frame_name_][pkey_].append(track_data_pred_[pkey_.split('_')[1]][-1])
 
                 ############ save the video / frames ##############
-                if(self.cfg.render.enable and self.visualizer is not None and rel_idx>=self.cfg.phalp.n_init):
+                if(
+                    self.cfg.render.enable
+                    and self.visualizer is not None
+                    and (rel_idx>=self.cfg.phalp.n_init or rel_idx + 1 == len(list_of_frames))
+                ):
                     d_ = self.cfg.phalp.n_init+1 if(rel_idx+1==len(list_of_frames)) else 1
                     for t__ in range(rel_idx, rel_idx+d_):
 
