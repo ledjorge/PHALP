@@ -137,7 +137,92 @@ class PHALP(nn.Module):
             pass
         
     def track(self):
-        
+        # process the source video and return a list of frames
+        # source can be a video file, a youtube link or a image folder
+        io_data = self.io_manager.get_frames_from_source()
+        full_frame_list = io_data['list_of_frames']
+        additional_data = io_data['additional_data']
+        base_video_seq = io_data['video_name']
+
+        # Respect start/end frame limits once for the entire sequence
+        if self.cfg.phalp.start_frame != -1:
+            full_frame_list = full_frame_list[self.cfg.phalp.start_frame:self.cfg.phalp.end_frame]
+
+        total_frames = len(full_frame_list)
+        if total_frames == 0:
+            log.info("No frames to process for source %s", self.cfg.video.source)
+            return 0
+
+        # Optional chunked processing to limit memory footprint on long sequences.
+        chunk_size = getattr(self.cfg.video, "chunk_size", -1)
+        using_chunks = chunk_size and chunk_size > 0
+        chunk_ranges = [(0, total_frames)]
+        if using_chunks:
+            chunk_ranges = []
+            for start in range(0, total_frames, chunk_size):
+                end = min(start + chunk_size, total_frames)
+                chunk_ranges.append((start, end))
+
+        render_cfg = self.cfg.render
+        frames_base_dir = None
+        if getattr(render_cfg, "output_frames", False):
+            frames_subdir = render_cfg.frames_dir or "render_frames"
+            frames_base_dir = Path(self.cfg.video.output_dir) / frames_subdir / base_video_seq
+            frames_base_dir.mkdir(parents=True, exist_ok=True)
+
+        original_video_seq = getattr(self.cfg, "video_seq", base_video_seq)
+
+        if not using_chunks:
+            pkl_path = f"{self.cfg.video.output_dir}/results/{self.cfg.track_dataset}_{base_video_seq}.pkl"
+            if (not self.cfg.overwrite) and os.path.isfile(pkl_path):
+                return 0
+
+        for idx, (start, end) in enumerate(chunk_ranges):
+            chunk_frames = full_frame_list[start:end]
+            chunk_seq = base_video_seq if not using_chunks else f"{base_video_seq}_chunk{idx:05d}"
+            self.cfg.video_seq = chunk_seq
+
+            pkl_path = f"{self.cfg.video.output_dir}/results/{self.cfg.track_dataset}_{chunk_seq}.pkl"
+            if using_chunks and getattr(self.cfg.video, "resume_chunks", True) and (not self.cfg.overwrite) and os.path.isfile(pkl_path):
+                log.info("Skipping chunk %s (frames %d-%d); results already exist.", chunk_seq, start, end - 1)
+                continue
+
+            video_path = None
+            if getattr(render_cfg, "output_video", True):
+                video_dir = Path(self.cfg.video.output_dir)
+                if getattr(render_cfg, "video_dir", ""):
+                    video_dir = video_dir / render_cfg.video_dir
+                video_dir.mkdir(parents=True, exist_ok=True)
+                video_filename = render_cfg.video_filename or f"{self.cfg.base_tracker}_{chunk_seq}.mp4"
+                video_path = str(video_dir / video_filename)
+
+            frames_dir = frames_base_dir
+            self._process_chunk(
+                chunk_frames=chunk_frames,
+                additional_data=additional_data,
+                pkl_path=pkl_path,
+                video_path=video_path,
+                frames_dir=frames_dir,
+                start_offset=start,
+                chunk_index=idx,
+                chunk_total=len(chunk_ranges),
+                chunk_seq=chunk_seq,
+            )
+
+        self.cfg.video_seq = original_video_seq
+
+    def _process_chunk(
+        self,
+        chunk_frames,
+        additional_data,
+        pkl_path,
+        video_path,
+        frames_dir,
+        start_offset,
+        chunk_index,
+        chunk_total,
+        chunk_seq,
+    ):
         eval_keys       = ['tracked_ids', 'tracked_bbox', 'tid', 'bbox', 'tracked_time']
         history_keys    = ['appe', 'loca', 'pose', 'uv'] if self.cfg.render.enable else []
         prediction_keys = ['prediction_uv', 'prediction_pose', 'prediction_loca'] if self.cfg.render.enable else []
@@ -146,91 +231,77 @@ class PHALP(nn.Module):
         history_keys    = history_keys + extra_keys_1 + extra_keys_2
         visual_store_   = eval_keys + history_keys + prediction_keys
         tmp_keys_       = ['uv', 'prediction_uv', 'prediction_pose', 'prediction_loca']
-        
-        # process the source video and return a list of frames
-        # source can be a video file, a youtube link or a image folder
-        io_data = self.io_manager.get_frames_from_source()
-        list_of_frames, additional_data = io_data['list_of_frames'], io_data['additional_data']
-        self.cfg.video_seq = io_data['video_name']
-        pkl_path = self.cfg.video.output_dir + '/results/' + self.cfg.track_dataset + "_" + str(self.cfg.video_seq) + '.pkl'
-        
-        # check if the video is already processed                                  
-        if(not(self.cfg.overwrite) and os.path.isfile(pkl_path)): 
-            return 0
-        
+
         # eval mode
         self.eval()
-        
+
         # setup rendering, deep sort and directory structure
         self.setup_deepsort()
         self.default_setup()
-        
-        log.info("Saving tracks at : " + self.cfg.video.output_dir + '/results/' + str(self.cfg.video_seq))
 
-        render_cfg = self.cfg.render
-        video_root = Path(self.cfg.video.output_dir)
-        video_dir = video_root
-        if getattr(render_cfg, "video_dir", ""):
-            video_dir = video_root / render_cfg.video_dir
+        log.info(
+            "Saving tracks at : %s/results/%s (chunk %d/%d)",
+            self.cfg.video.output_dir,
+            chunk_seq,
+            chunk_index + 1,
+            chunk_total,
+        )
 
-        frames_dir = None
-        if getattr(render_cfg, "output_frames", False):
-            frames_subdir = render_cfg.frames_dir or "render_frames"
-            frames_dir = video_root / frames_subdir / str(self.cfg.video_seq)
-            frames_dir.mkdir(parents=True, exist_ok=True)
-
-        video_path = None
-        if getattr(render_cfg, "output_video", True):
-            video_dir.mkdir(parents=True, exist_ok=True)
-            video_filename = render_cfg.video_filename or f"{self.cfg.base_tracker}_{self.cfg.video_seq}.mp4"
-            video_path = str((video_dir / video_filename))
-        
-        try: 
-            
-            list_of_frames = list_of_frames if self.cfg.phalp.start_frame==-1 else list_of_frames[self.cfg.phalp.start_frame:self.cfg.phalp.end_frame]
+        try:
+            list_of_frames = chunk_frames
             list_of_shots = self.get_list_of_shots(list_of_frames)
-            
+
             tracked_frames = []
             final_visuals_dic = {}
-            
-            for t_, frame_name in progress_bar(enumerate(list_of_frames), description="Tracking : " + self.cfg.video_seq, total=len(list_of_frames), disable=False):
-                
-                image_frame               = self.io_manager.read_frame(frame_name)
-                img_height, img_width, _  = image_frame.shape
-                new_image_size            = max(img_height, img_width)
-                top, left                 = (new_image_size - img_height)//2, (new_image_size - img_width)//2,
-                measurments               = [img_height, img_width, new_image_size, left, top]
-                self.cfg.phalp.shot       = 1 if t_ in list_of_shots else 0
 
-                if(self.cfg.render.enable):
+            progress_desc = f"Tracking : {chunk_seq}"
+            if chunk_total > 1:
+                progress_desc += f" ({chunk_index + 1}/{chunk_total})"
+
+            for rel_idx, frame_name in progress_bar(enumerate(list_of_frames), description=progress_desc, total=len(list_of_frames), disable=False):
+
+                absolute_frame_idx      = start_offset + rel_idx
+                image_frame             = self.io_manager.read_frame(frame_name)
+                img_height, img_width, _  = image_frame.shape
+                new_image_size          = max(img_height, img_width)
+                top, left               = (new_image_size - img_height)//2, (new_image_size - img_width)//2,
+                measurments             = [img_height, img_width, new_image_size, left, top]
+                self.cfg.phalp.shot     = 1 if rel_idx in list_of_shots else 0
+
+                if(self.cfg.render.enable and self.visualizer is not None):
                     # reset the renderer
-                    # TODO: add a flag for full resolution rendering
                     self.cfg.render.up_scale = int(self.cfg.render.output_resolution / self.cfg.render.res)
-                    self.visualizer.reset_render(self.cfg.render.res*self.cfg.render.up_scale)
-                
+                    try:
+                        self.visualizer.reset_render(self.cfg.render.res*self.cfg.render.up_scale)
+                    except Exception as exc:
+                        log.warning("Renderer reset failed (%s). Disabling rendering and continuing.", exc)
+                        self.cfg.render.enable = False
+                        self.visualizer = None
+
                 ############ detection ##############
-                pred_bbox, pred_bbox_pad, pred_masks, pred_scores, pred_classes, gt_tids, gt_annots = self.get_detections(image_frame, frame_name, t_, additional_data, measurments)
+                pred_bbox, pred_bbox_pad, pred_masks, pred_scores, pred_classes, gt_tids, gt_annots = self.get_detections(image_frame, frame_name, rel_idx, additional_data, measurments)
 
                 ############ Run EXTRA models to attach to the detections ##############
-                extra_data = self.run_additional_models(image_frame, pred_bbox, pred_masks, pred_scores, pred_classes, frame_name, t_, measurments, gt_tids, gt_annots)
-                
+                extra_data = self.run_additional_models(image_frame, pred_bbox, pred_masks, pred_scores, pred_classes, frame_name, rel_idx, measurments, gt_tids, gt_annots)
+
                 ############ HMAR ##############
-                detections = self.get_human_features(image_frame, pred_masks, pred_bbox, pred_bbox_pad, pred_scores, frame_name, pred_classes, t_, measurments, gt_tids, gt_annots, extra_data)
+                detections = self.get_human_features(image_frame, pred_masks, pred_bbox, pred_bbox_pad, pred_scores, frame_name, pred_classes, rel_idx, measurments, gt_tids, gt_annots, extra_data)
 
                 ############ tracking ##############
                 self.tracker.predict()
-                self.tracker.update(detections, t_, frame_name, self.cfg.phalp.shot)
+                self.tracker.update(detections, rel_idx, frame_name, self.cfg.phalp.shot)
 
                 ############ record the results ##############
-                final_visuals_dic.setdefault(frame_name, {'time': t_, 'shot': self.cfg.phalp.shot, 'frame_path': frame_name})
-                if(self.cfg.render.enable): final_visuals_dic[frame_name]['frame'] = image_frame
+                final_visuals_dic.setdefault(frame_name, {'time': absolute_frame_idx, 'shot': self.cfg.phalp.shot, 'frame_path': frame_name})
+                if(self.cfg.render.enable and self.visualizer is not None):
+                    final_visuals_dic[frame_name]['frame'] = image_frame
                 for key_ in visual_store_: final_visuals_dic[frame_name][key_] = []
-                
+
                 ############ record the track states (history and predictions) ##############
                 for tracks_ in self.tracker.tracks:
                     if(frame_name not in tracked_frames): tracked_frames.append(frame_name)
                     if(not(tracks_.is_confirmed())): continue
-                    
+
                     track_id        = tracks_.track_id
                     track_data_hist = tracks_.track_data['history'][-1]
                     track_data_pred = tracks_.track_data['prediction']
@@ -245,7 +316,7 @@ class PHALP(nn.Module):
                     if(tracks_.time_since_update==0):
                         final_visuals_dic[frame_name]['tracked_ids'].append(track_id)
                         final_visuals_dic[frame_name]['tracked_bbox'].append(track_data_hist['bbox'])
-                        
+
                         if(tracks_.hits==self.cfg.phalp.n_init):
                             for pt in range(self.cfg.phalp.n_init-1):
                                 track_data_hist_ = tracks_.track_data['history'][-2-pt]
@@ -260,13 +331,13 @@ class PHALP(nn.Module):
                                 for hkey_ in history_keys:    final_visuals_dic[frame_name_][hkey_].append(track_data_hist_[hkey_])
                                 for pkey_ in prediction_keys: final_visuals_dic[frame_name_][pkey_].append(track_data_pred_[pkey_.split('_')[1]][-1])
 
-                ############ save the video ##############
-                if(self.cfg.render.enable and t_>=self.cfg.phalp.n_init):                    
-                    d_ = self.cfg.phalp.n_init+1 if(t_+1==len(list_of_frames)) else 1
-                    for t__ in range(t_, t_+d_):
+                ############ save the video / frames ##############
+                if(self.cfg.render.enable and self.visualizer is not None and rel_idx>=self.cfg.phalp.n_init):
+                    d_ = self.cfg.phalp.n_init+1 if(rel_idx+1==len(list_of_frames)) else 1
+                    for t__ in range(rel_idx, rel_idx+d_):
 
                         frame_key = list_of_frames[t__-self.cfg.phalp.n_init]
-                        rendered_, f_size = self.visualizer.render_video(final_visuals_dic[frame_key])      
+                        rendered_, f_size = self.visualizer.render_video(final_visuals_dic[frame_key])
 
                         # save the rendered frame
                         if getattr(self.cfg.render, "output_video", True) and video_path is not None:
@@ -282,21 +353,24 @@ class PHALP(nn.Module):
                             cv2.imwrite(str(frame_output_path), rendered_)
 
                         # delete the frame after rendering it
-                        del final_visuals_dic[frame_key]['frame']
-                        
+                        if 'frame' in final_visuals_dic[frame_key]:
+                            del final_visuals_dic[frame_key]['frame']
+
                         # delete unnecessary keys
-                        for tkey_ in tmp_keys_:  
-                            del final_visuals_dic[frame_key][tkey_] 
+                        for tkey_ in tmp_keys_:
+                            if tkey_ in final_visuals_dic[frame_key]:
+                                del final_visuals_dic[frame_key][tkey_]
 
             joblib.dump(final_visuals_dic, pkl_path, compress=3)
             self.io_manager.close_video()
-            if(self.cfg.use_gt): joblib.dump(self.tracker.tracked_cost, self.cfg.video.output_dir + '/results/' + str(self.cfg.video_seq) + '_' + str(self.cfg.phalp.start_frame) + '_distance.pkl')
-            
+            if(self.cfg.use_gt):
+                joblib.dump(self.tracker.tracked_cost, self.cfg.video.output_dir + '/results/' + str(self.cfg.video_seq) + '_' + str(self.cfg.phalp.start_frame) + '_distance.pkl')
+
             return final_visuals_dic, pkl_path
-            
-        except Exception as e: 
+
+        except Exception as e:
             print(e)
-            print(traceback.format_exc())         
+            print(traceback.format_exc())
 
     def get_detections(self, image, frame_name, t_, additional_data=None, measurments=None):
         

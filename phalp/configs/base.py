@@ -16,6 +16,8 @@ class VideoConfig:
     start_frame: int = -1
     end_frame: int = 1300
     useffmpeg: bool = False
+    chunk_size: int = -1
+    resume_chunks: bool = True
 
     # this will be used if extract_video=False
     start_time: str = '0s'
